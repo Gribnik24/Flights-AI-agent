@@ -2,3 +2,4 @@
 .venv/
 
 materials/
+__pycache__/
