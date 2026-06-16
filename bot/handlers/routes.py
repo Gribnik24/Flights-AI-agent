@@ -7,7 +7,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from src.agent_wrapper import process_message
+from agent.agent_wrapper import process_message
 
 router = Router()
 
@@ -79,7 +79,7 @@ async def income_message(message: Message, bot: Bot):
             message_id=loading_message.message_id
         )
         
-        await message.answer(response)
+        await message.answer(response, parse_mode='Markdown')
     
     except Exception as e:
         await bot.delete_message(
