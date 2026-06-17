@@ -122,15 +122,28 @@ async def get_airport_data(mode: str,
 @tool
 async def get_station_timetable(station_code: str,
                                 event_date: str,
-                                event: str) -> str:
+                                event: str,
+                                departure_city: Optional[str] = None,
+                                arrival_city: Optional[str] = None,
+                                time_lower_bound: Optional[str] = None,
+                                time_upper_bound: Optional[str] = None,
+                                exact_time: Optional[str] = None,
+                                company_name: Optional[str] = None) -> str:
     """
-    Позволяет получить список рейсов, отправляющихся от указанного аэропорта и информацию по каждому рейсу.
+    Позволяет получить список рейсов, отправляющихся от указанного аэропорта и информацию по каждому рейсу
+    Позволяет выполнить фильтрацию результата функции по названию компании, которая организовывает перелет, времени событий или городу вылета или отлета.
     
     Args:
         station_code: код аэропорта,
         event_date: Дата, на которую необходимо получить список рейсов. Должна быть указана в формате, соответствующем стандарту ISO 8601. Например, YYYY-MM-DD.
         event: Событие, для которого нужно отфильтровать нитки в расписании.
                  Возможные значения: departure — включить в ответ только отправляющиеся со станции нитки; arrival — включить в ответ только прибывающие на станцию нитки.
+        departure_city: Город отправления, по которому необходимо отфильтровать результаты. Опциональный параметр.
+        arrival_city: Город прилета, по которому необходимо отфильтровать результаты. Опциональный параметр.
+        time_lower_bound: Начальная включительная граница времени в формате hh:mm. Опциональный параметр.
+        time_upper_bound: Конечная включительная граница времени в формате hh:mm. Опциональный параметр.
+        exact_time: Точное время события в формате hh:mm. Опциональный параметр. В случае заполнения параметры time_lower_bound и time_upper_bound игнорируются.
+        company_name: Название компании, которая организовывает полет. Опциональный параметр.
     
     Returns:
         Строка в формате JSON со следующими полями:
@@ -220,64 +233,13 @@ async def get_station_timetable(station_code: str,
     
     station_timetable['schedule'] = trips_info
     logging.info('Успешное завершение обработки данных рейсов, полученных через API')
-    logging.info('Успешное завершение инструмента tools.get_station_timetable')
     
-    return json.dumps(station_timetable, indent=2, ensure_ascii=False)
-        
-@tool
-async def search_trips(timetable_data: str,
-                       departure_city: Optional[str] = None,
-                       arrival_city: Optional[str] = None,
-                       time_lower_bound: Optional[str] = None,
-                       time_upper_bound: Optional[str] = None,
-                       exact_time: Optional[str] = None,
-                       company_name: Optional[str] = None) -> str:
-    """
-    Позволяет выполнить фильтрацию результата функции get_station_timetable по названию компании, которая организовывает перелет,
-    времени событий или городу вылета или отлета.
     
-    Args:
-        timetable_data: Результат выполнения функции timetable_data. Строка в формате JSON.
-        departure_city: Город отправления, по которому необходимо отфильтровать результаты. Опциональный параметр.
-        arrival_city: Город прилета, по которому необходимо отфильтровать результаты. Опциональный параметр.
-        time_lower_bound: Начальная включительная граница времени в формате hh:mm. Опциональный параметр.
-        time_upper_bound: Конечная включительная граница времени в формате hh:mm. Опциональный параметр.
-        exact_time: Точное время события в формате hh:mm. Опциональный параметр. В случае заполнения параметры time_lower_bound и time_upper_bound игнорируются.
-        company_name: Название компании, которая организовывает полет. Опциональный параметр.
-    
-    Returns:
-    Строка в формате JSON со следующими полями:
-        date: Запрашиваемая дата событий.
-        total_values: Количесвто событий на запрашиваемую дату.
-        station_type_eng: Тип станции на английском.
-        station_type_ru: Тип станции на русском.
-        schedule: Массив с информацией по конкретным вылетам или прилетам (в зависимости от аргумента event). Содержит поля:
-            trip_number: Номер рейса.
-            transport_name: Название транспорта (например 'Boeing 737-800')
-            company_name: Название компании, которая организовывает полет.
-            event_time: Время вылета или прилета в формате hh:mm (в зависимости от аргумента event)
-            trip_title: Название нитки. Составляется из полных названий первой и последней станций следования.
-            departure_point: Начальная точка следования.
-            arrival_point: Конечная точка следования.
-    """
-    timetable_data_type = type(timetable_data).__name__
-    logging.info(f'Запуск инструмента tools.search_trips с параметрами: departure_city={departure_city}, arrival_city={arrival_city},'
-                 f' time_lower_bound={time_lower_bound}, time_upper_bound={time_upper_bound}, exact_time={exact_time}, company_name={company_name}'
-                 f' и timetable_data в формате {timetable_data_type}')
-    # Валидация аргументов
-    if isinstance(timetable_data, dict):
-        filter_station_timetable = timetable_data
-    else:
-        try:
-            filter_station_timetable = json.loads(timetable_data)
-        except json.JSONDecodeError as e:
-            logging.error(f'Ошибка парсинга JSON в search_trips: {e}')
-            logging.error(f'Полученные данные: {timetable_data[:500]}')
-            return json.dumps({'error': f'Невалидный JSON: {str(e)}'}, ensure_ascii=False)
-
-    trips = filter_station_timetable.get('schedule', [])
+    logging.info(f'Старт фильтрация с параметрами: departure_city={departure_city}, arrival_city={arrival_city},'
+                f' time_lower_bound={time_lower_bound}, time_upper_bound={time_upper_bound}, exact_time={exact_time}, company_name={company_name}')
     
     # Фильтрация по параметрам
+    trips = station_timetable.get('schedule', [])
     if departure_city is not None:
         lw_city = departure_city.lower()
         trips = [trip for trip in trips if trip['departure_point'] is not None and trip['departure_point'].lower() == lw_city]
@@ -299,9 +261,10 @@ async def search_trips(timetable_data: str,
         lw_company = company_name.lower()
         trips = [trip for trip in trips if trip['departure_point'] is not None and trip['company_name'].lower() == lw_company]
         
-    filter_station_timetable['schedule'] = trips
+    station_timetable['schedule'] = trips
     
-    logging.info('Успешное завершение инструмента tools.search_trips')
-    return json.dumps(filter_station_timetable, ensure_ascii=False)
+    logging.info('Успешное завершение инструмента tools.get_station_timetable')
+    
+    return json.dumps(station_timetable, ensure_ascii=False)
 
-tools_list = [get_airport_data, get_station_timetable, search_trips]
+tools_list = [get_airport_data, get_station_timetable]
