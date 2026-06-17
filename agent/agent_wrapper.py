@@ -2,110 +2,159 @@ import os
 import time
 import json
 import logging
-from langchain_core.messages import HumanMessage
-
+import asyncio
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from agent.flights_agent import agent
 
-
-logging.basicConfig(level=logging.INFO, filename="../logs/chat_logs.log", filemode="a", encoding='utf-8')
-
-async def run_and_trace(agent, config, query: str) -> str:
+# Настройка двух отдельных логгеров
+def setup_loggers():
     """
-    Функция для показа логов TAO цикла у ReAct агентов
-    
-    Args:
-        agent: CompiledStateGraph агента
-        config: Конфигурация с session_id и другими параметрами
-        query: Запрос пользователя
-        
-    Returns:
-        str: Отформатированные логи TAO цикла
+    Настройка двух логгеров для чата и TAO
     """
-    logging.info('Запуск функции agent_wrapper.run_and_trace()')
-    tao_logs = ''
-    start_time = time.time()
+    # Логгер для чата
+    chat_logger = logging.getLogger('chat_logs')
+    chat_logger.setLevel(logging.INFO)
+    chat_logger.propagate = False
     
-    dialog_len = 0
+    # Логгер для TAO
+    tao_logger = logging.getLogger('tao_logs')
+    tao_logger.setLevel(logging.INFO)
+    tao_logger.propagate = False
+    
+    # Очищаем существующие обработчики
+    chat_logger.handlers.clear()
+    tao_logger.handlers.clear()
+    
+    # Создаем файловые обработчики
+    chat_handler = logging.FileHandler(
+        filename="../logs/chat_logs.log",
+        mode="a",
+        encoding='utf-8'
+    )
+    tao_handler = logging.FileHandler(
+        filename="../logs/tao_logs.log",
+        mode="a",
+        encoding='utf-8'
+    )
+    
+    chat_formatter = logging.Formatter('[CHAT LOGS]: %(levelname)s | %(message)s')
+    tap_formatter = logging.Formatter('[TAO LOGS]: %(levelname)s | %(message)s')
+    chat_handler.setFormatter(chat_formatter)
+    tao_handler.setFormatter(tap_formatter)
+    
+    # Добавляем обработчики к логгерам
+    chat_logger.addHandler(chat_handler)
+    tao_logger.addHandler(tao_handler)
+    
+    return chat_logger, tao_logger
+
+chat_logger, tao_logger = setup_loggers()
+
+async def collect_tao_logs(result, start_time):
+    """
+    Фоновый сбор TAO логов в том же формате, что и у вас
+    """
     try:
-        if hasattr(agent, 'memory') and agent.memory:
-            if hasattr(agent.memory, 'chat_memory'):
-                dialog_len = len(agent.memory.chat_memory.messages)
-        elif hasattr(agent.memory, 'messages'):
-            dialog_len = len(agent.memory.messages)
-        session_id = config.get('configurable', {}).get('session_id', 'default')
-        logging.info(f'Текущая длина истории для сессии {session_id}: {dialog_len}')
+        chat_logger.info('Запуск фонового сбора TAO логов')
+        
+        elapsed = time.time() - start_time
+        tool_count = 0
+        step_num = 0
+        all_messages = result['messages']
+        
+        last_human_idx = -1
+        for i, msg in enumerate(all_messages):
+            if type(msg).__name__ == 'HumanMessage':
+                last_human_idx = i
+        current_messages = all_messages[last_human_idx:]
+        
+        for msg in current_messages:
+            msg_type = type(msg).__name__
+
+            if msg_type == 'HumanMessage':
+                tao_logger.info(f'Обработка сообщения (HumanMessage)')
+                tao_logger.info(f'HUMAN MESSAGE: {msg.content}')
+            
+            elif msg_type == 'AIMessage' and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                tao_logger.info(f'Обработка (AIMessage - Think/Act)')
+                step_num += 1
+                for tc in msg.tool_calls:
+                    tool_count += 1
+                    tao_logger.info(f'--- TAO Step {step_num} ---')
+                    if not msg.content and msg.additional_kwargs:
+                        tao_logger.info(f'Обработка шага сообщения (AIMessage - Think)')
+                        tao_logger.info(f'THOUGHT: {msg.additional_kwargs['reasoning_content']}')
+                    tao_logger.info(f'Обработка сообщения (AIMessage - Act)')
+                    tao_logger.info(f'ACTION: {tc["name"]}({json.dumps(tc["args"], ensure_ascii=False)})')
+                        
+            elif msg_type == 'ToolMessage':
+                tao_logger.info(f'Обработка сообщения (ToolMessage - Observe)')
+                tao_logger.info(f'OBSERVATION: {msg.content}') 
+                
+            elif msg_type == 'AIMessage' and not getattr(msg, 'tool_calls', None):
+                if msg.content and msg != result['messages'][0]:
+                    tao_logger.info(f'FINAL ANSWER: {msg.content}')         
+        
+        # Статистика
+        tao_logger.info(f'Обработка статистики по ответу')
+        tao_logger.info(f'Statistics: TAO cycles: {step_num} | Tool calls: {tool_count} | Time: {elapsed:.2f} s')
+        chat_logger.info(f'Фоновый сбор TAO логов завершен')
         
     except Exception as e:
-        logging.warning(f'Не удалось получить длину истории: {e}')
-        dialog_len = 0
-    
+        chat_logger.error(f'Ошибка при сборе TAO логов: {e}', exc_info=True)
+
+async def run_and_trace(agent, config, query: str):
+    """
+    Функция для запуска агента и сбора логов в фоне
+    Возвращает ответ для пользователя и фоновую задачу
+    """
+    chat_logger.info('Запуск функции agent_wrapper.run_and_trace()')
+    start_time = time.time()
     
     result = None
     try:
-        logging.info(f'Старт передачи сообщения пользователя: {query[:200]}...' if len(query) > 200 else f'Старт передачи сообщения пользователя: {query}')
         result = await agent.ainvoke({'messages': [HumanMessage(content=query)]}, config=config)
-        logging.info('Передача сообщения и получения ответа от агента завершилась успешно')
+        chat_logger.info('Передача сообщения и получения ответа от агента завершилась успешно')
     except Exception as e:
-        logging.error(f'Передача сообщения и получения ответа от агента завершилась ошибкой: {e}', exc_info=True)
+        chat_logger.error(f'Передача сообщения и получения ответа от агента завершилась ошибкой: {e}', exc_info=True)
+        #return f"Произошла ошибка при выполнении запроса агента: {e}", None
         return f"Произошла ошибка при выполнении запроса агента: {e}"
 
     if result is None:
+        #return "Ошибка: агент не вернул результат.", None
         return "Ошибка: агент не вернул результат."
 
-    elapsed = time.time() - start_time
+    # Получаем финальный ответ для пользователя
+    user_response = "Ошибка: нет сообщений в ответе"
+    if 'messages' in result and len(result['messages']) > 0:
+        last_message = result['messages'][-1]
+        if hasattr(last_message, 'content') and last_message.content:
+            user_response = last_message.content
+    
+    # Запускаем фоновый сбор TAO логов
+    asyncio.create_task(collect_tao_logs(result, start_time))
+    
+    # Возвращаем ответ пользователю
+    return user_response
 
-    tool_count = 0
-    step_num = 0
-    for msg in range(len(result['messages']) - 1): #doalog_len
-        cur_msg = result['messages'][msg]
-        msg_type = type(cur_msg).__name__
-
-        if msg_type == 'HumanMessage':
-            logging.info(f'Обработка сообщения {msg} (HumanMessage)')
-            tao_logs = f'USER QUERY: {cur_msg.content}\n'
-        
-        elif msg_type == 'AIMessage' and hasattr(cur_msg, 'tool_calls') and cur_msg.tool_calls:
-            logging.info(f'Обработка сообщения {msg} (AIMessage - Think/Act)')
-            step_num += 1
-            for tao_step, tc in enumerate(iterable=cur_msg.tool_calls, start=1):
-                tool_count += 1
-                tao_logs = f'--- TAO Step {step_num} ---\n'
-                if cur_msg.content:
-                    logging.info(f'Обработка шага {tao_step} сообщения {msg} (AIMessage - Think)')
-                    tao_logs += f'THOUGHT: {cur_msg.content}\n'
-                logging.info(f'Обработка шага {tao_step} сообщения {msg} (AIMessage - Act)')
-                tao_logs += f'ACTION: {tc["name"]}({json.dumps(tc["args"], indent=2, ensure_ascii=False)})\n'
-
-        elif msg_type == 'ToolMessage':
-            content_preview = cur_msg.content
-            logging.info(f'Обработка шага сообщения {msg} (ToolMessage - Observe)')
-            tao_logs += f'OBSERVE: {content_preview}\n'
-
-        elif msg_type == 'AIMessage' and not getattr(cur_msg, 'tool_calls', None):
-            logging.info(f'Обработка финального ответа (AIMessage)')
-            if cur_msg.content and cur_msg != result['messages'][0]:
-                tao_logs += '\n--- Final Answer ---\n'
-                tao_logs += f'{cur_msg.content}\n'
-
-    logging.info(f'Обработка статистики по ответу')
-    tao_logs += f'Statistics:\nTAO cycles: {step_num}\nTool calls: {tool_count}\nTime: {elapsed:.2f} s'
-    return tao_logs
-
-
-async def process_message(user_message: str, user_id: int, show_tao_logs: bool = False) -> str:
+async def process_message(user_message: str, user_id: int, collect_tao_logs: bool = True) -> str:
+    """
+    Обработка сообщения пользователя
+    """
     try:
         config = {"configurable": {"thread_id": str(user_id)}}
         
-        if show_tao_logs:
-            tao_logs = await run_and_trace(agent=agent, config=config, query=user_message)
-            return tao_logs
+        # Запускаем агента и собираем логи в фоне
+        chat_logger.info(f'Старт передачи сообщения пользователя: {user_message}')
+        if collect_tao_logs:
+            response_content = await run_and_trace(agent, config, user_message)
+            chat_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла запущен')
+        else:
+            response_content = await agent.ainvoke({'messages': [HumanMessage(content=user_message)]}, config=config)
+            chat_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла отключен')
         
-        logging.info(f'Старт передачи сообщения пользователя: {user_message[:50]}')
-        response = await agent.ainvoke({"messages": [HumanMessage(content=user_message)]}, config=config)
-        last_message = response["messages"][-1]
-        logging.info('Успешное завершение асинхронного вызова агента')
-        return last_message.content
+        return response_content
     
     except Exception as e:
-        logging.error(f'Асинхронный вызов агента завершился ошибкой: {e}', exc_info=True)
+        chat_logger.error(f'Асинхронный вызов агента завершился ошибкой: {e}', exc_info=True)
         raise
