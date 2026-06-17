@@ -8,16 +8,14 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from agent.agent_wrapper import process_message
+from agent.flights_agent import memory
 
 router = Router()
 
 def get_main_button_keyboard():
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text='Помощь', callback_data='/help'),
-             InlineKeyboardButton(text='Обо мне', callback_data='/about')],
-            [InlineKeyboardButton(text='Репозиторий GitHub со мной',
-                                  url='https://github.com/Gribnik24/Flights-AI-agent')]],
+        inline_keyboard=[[InlineKeyboardButton(text='Репозиторий GitHub со мной',
+                                               url='https://github.com/Gribnik24/Flights-AI-agent')]],
         resize_keyboard=True
     )
     
@@ -26,40 +24,54 @@ def get_main_button_keyboard():
 @router.message(Command("start"))
 async def start(message: Message):
     start_message = f"""
-    Привет, {message.from_user.first_name}! Я бот, который умеет искать информацию о полетах.
+    Привет, {message.from_user.first_name}! Я бот, который умеет искать *информацию о полетах* ✈️.
 Ты можешь прописать следующие команды:
-**/help**  - для того, что я подсказал тебе мои действующие команды.
-**/about** - чтобы узнать подробнее, что я умею и в чем мой смысл.
-Либо нажми на кнопки на предоставленной клавиатуре ниже.
+• */about* - чтобы узнать подробнее, что я умею и в чем мой смысл
+• */CreatePresentation* - чтобы создать презентацию по истории нашей переписки
+• */restart* - чтобы очистить историю нашей переписки
     """
-    await message.answer(start_message, parse_mode='Markdown',
-                         reply_markup=get_main_button_keyboard()
-                         )
-    
-
-@router.message(Command('help'))
-async def help(message: Message):
-    help_message = """Тестовое сообщение help"""
-    await message.answer(help_message)
+    await message.answer(start_message, parse_mode='Markdown', reply_markup=get_main_button_keyboard())
     
     
 @router.message(Command('about'))
 async def about(message: Message):
-    about_message = """Тестовое сообщение about"""
-    await message.answer(about_message)
+    about_message = """
+Я — AI-бот для поиска информации о рейсах ✈️
+
+*Что я умею:*
+
+🔍 *Поиск аэропортов* — по названию города или полному названию аэропорта (на русском или английском)
+🛫 *Расписание рейсов* — по аэропорту, дате и типу события (вылет/прилёт)
+🕒 *Фильтрация рейсов* — по городу отправления/прилёта, времени, авиакомпании
+
+**Примеры запросов:**
+
+• «Найди аэропорты Москвы»
+• «Какие рейсы из Шереметьево 15 января?»
+• «Покажи прилёты в Домодедо до 12:00»
+• «Рейсы из SVO в JFK завтра»
+    """
+    await message.answer(about_message, parse_mode='markdown')
     
 
-# @router.message(Command('create_presentation'))
-# async def create_presentation(message: Message, bot: Bot):
-#     document = # логика получения документа
-#     file_id = document.file_id
+@router.message(Command('CreatePresentation'))
+async def create_presentation(message: Message, bot: Bot):
+    await message.answer('тестовое сообщение')
+    # document = # логика получения документа
+    # file_id = document.file_id
     
-#     file_name = await bot.get_file(file_id)
-#     file_path = file_name.file_path
+    # file_name = await bot.get_file(file_id)
+    # file_path = file_name.file_path
     
-#     file = FSInputFile(file_path)
+    # file = FSInputFile(file_path)
     
-#     await message.answer_document(file, caption="Ваша презентация по нашей переписке готова!")
+    # await message.answer_document(file, caption="Ваша презентация по нашей переписке готова!")
+    
+
+@router.message(Command('restart'))
+async def restart(message: Message):
+    memory.delete_thread(thread_id=str(message.from_user.id))
+    await message.answer('История успешно стерта.')
     
 
 @router.message()
@@ -69,7 +81,7 @@ async def income_message(message: Message, bot: Bot):
         await message.answer('К сожалению мне не известна эта команда')
         return
     
-    loading_message = await message.answer("Выполняю поиск информации...")
+    loading_message = await message.answer("Ищу и размышляю...")
     
     try:
         response = await process_message(text, message.from_user.id)
