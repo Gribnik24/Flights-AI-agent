@@ -1,9 +1,8 @@
-import os
 import time
 import json
 import logging
 import asyncio
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage
 from agent.flights_agent import agent
 
 # Настройка двух отдельных логгеров
@@ -37,7 +36,7 @@ def setup_loggers():
         encoding='utf-8'
     )
     
-    chat_formatter = logging.Formatter('[CHAT LOGS]: %(levelname)s | %(message)s')
+    chat_formatter = logging.Formatter('[AGENT LOGS]: %(levelname)s | %(message)s')
     tap_formatter = logging.Formatter('[TAO LOGS]: %(levelname)s | %(message)s')
     chat_handler.setFormatter(chat_formatter)
     tao_handler.setFormatter(tap_formatter)
