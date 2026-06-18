@@ -1,19 +1,42 @@
 import os
 from dotenv import load_dotenv
-from datetime import datetime
+
 import json
 from typing import Optional
 import logging
-import asyncio
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import pandas as pd
 import sqlite3
 
+import asyncio
 from langchain_core.tools import tool
 
 logging.basicConfig(level=logging.INFO, filename="../logs/chat_logs.log", filemode="a", encoding='utf-8')
 load_dotenv()
+
+@tool
+async def get_current_time(timezone: str = 'UTC') -> str:
+    """
+    Возвращает текущие дату и время для указанного часового пояса в формате IANA.
+    Args:
+        timezone: Имя часового пояса в формате IANA (например 'Europe/Moscow', 'Asia/Novosibirsk', 'UTC'). По умолчанию 'UTC'.
+    Returns:
+        Строка в формате JSON с полями `date` (YYYY-MM-DD) и `time` (HH:MM:SS) в указанном часовом поясе.
+    """
+    logging.info(f'Запуск инструмента tools.get_current_time для получения текущего времени')
+    try:
+        tz = ZoneInfo(timezone)
+        now = datetime.now(tz)
+        result = {'date': now.strftime('%Y-%m-%d'), 'time': now.strftime('%H:%M:%S')}
+        logging.info('Успешное завершение инструмента tools.get_current_time')
+        return json.dumps(result, ensure_ascii=False)
+    except Exception:
+        logging.error('Ошибка Получения текущего времени', exc_info=True)
+        return json.dumps({'error': 'Ошибка Получения текущего времени'}, ensure_ascii=False)
 
 @tool
 async def get_airport_data(mode: str,
@@ -36,6 +59,7 @@ async def get_airport_data(mode: str,
         iata_code: Код IATA.
         city_ru: Город нахождения аэропорта.
         country_ru: Страна нахождения аэропорта.
+        timezone: часовой пояс аэропорта в формате IANA.
     """
     # Нормализация строки (убираем дефисы и лишние пробелы)
     def normalize(s: str) -> str:
@@ -113,7 +137,8 @@ async def get_airport_data(mode: str,
                 'airport_name_en': None if pd.isna(row['name_en']) else row['name_en'],
                 'iata_code': None if pd.isna(row['IATA']) else row['IATA'],
                 'city_ru': None if pd.isna(row['city_ru']) else row['city_ru'],
-                'country_ru': None if pd.isna(row['country_ru']) else row['country_ru']
+                'country_ru': None if pd.isna(row['country_ru']) else row['country_ru'],
+                'timezone': None if pd.isna(row['timezone']) else row['timezone']
             })
     
     logging.info('Успешное завершение инструмента tools.get_airport_data')
@@ -267,4 +292,4 @@ async def get_station_timetable(station_code: str,
     
     return json.dumps(station_timetable, ensure_ascii=False)
 
-tools_list = [get_airport_data, get_station_timetable]
+tools_list = [get_current_time, get_airport_data, get_station_timetable]
