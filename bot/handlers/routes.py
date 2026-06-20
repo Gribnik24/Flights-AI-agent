@@ -14,8 +14,7 @@ import logging
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-_PROMPTS_DIR = Path(__file__).parent.parent / os.getenv("PROMPTS_DIR", "prompts")
-
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / os.getenv("PROMPTS_DIR", "prompts")
 
 from agent.agent_wrapper import process_message
 from agent.flights_agent import agent, memory
