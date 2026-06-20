@@ -11,9 +11,9 @@ def setup_loggers():
     Настройка двух логгеров для чата и TAO
     """
     # Логгер для чата
-    chat_logger = logging.getLogger('chat_logs')
-    chat_logger.setLevel(logging.INFO)
-    chat_logger.propagate = False
+    agent_logger = logging.getLogger('agent_logs')
+    agent_logger.setLevel(logging.INFO)
+    agent_logger.propagate = False
     
     # Логгер для TAO
     tao_logger = logging.getLogger('tao_logs')
@@ -21,11 +21,11 @@ def setup_loggers():
     tao_logger.propagate = False
     
     # Очищаем существующие обработчики
-    chat_logger.handlers.clear()
+    agent_logger.handlers.clear()
     tao_logger.handlers.clear()
     
     # Создаем файловые обработчики
-    chat_handler = logging.FileHandler(
+    agent_handler = logging.FileHandler(
         filename="../logs/chat_logs.log",
         mode="a",
         encoding='utf-8'
@@ -36,25 +36,25 @@ def setup_loggers():
         encoding='utf-8'
     )
     
-    chat_formatter = logging.Formatter('[AGENT LOGS]: %(levelname)s | %(message)s')
-    tap_formatter = logging.Formatter('[TAO LOGS]: %(levelname)s | %(message)s')
-    chat_handler.setFormatter(chat_formatter)
-    tao_handler.setFormatter(tap_formatter)
+    agent_formatter = logging.Formatter('[AGENT LOGS]: %(levelname)s | %(message)s')
+    tao_formatter = logging.Formatter('[TAO LOGS]: %(levelname)s | %(message)s')
+    agent_handler.setFormatter(agent_formatter)
+    tao_handler.setFormatter(tao_formatter)
     
     # Добавляем обработчики к логгерам
-    chat_logger.addHandler(chat_handler)
+    agent_logger.addHandler(agent_handler)
     tao_logger.addHandler(tao_handler)
     
-    return chat_logger, tao_logger
+    return agent_logger, tao_logger
 
-chat_logger, tao_logger = setup_loggers()
+agent_logger, tao_logger = setup_loggers()
 
 async def collect_tao_logs(result, start_time):
     """
     Фоновый сбор TAO логов в том же формате, что и у вас
     """
     try:
-        chat_logger.info('Запуск фонового сбора TAO логов')
+        agent_logger.info('Запуск фонового сбора TAO логов')
         
         elapsed = time.time() - start_time
         tool_count = 0
@@ -97,25 +97,25 @@ async def collect_tao_logs(result, start_time):
         # Статистика
         tao_logger.info(f'Обработка статистики по ответу')
         tao_logger.info(f'Statistics: TAO cycles: {step_num} | Tool calls: {tool_count} | Time: {elapsed:.2f} s')
-        chat_logger.info(f'Фоновый сбор TAO логов завершен')
+        agent_logger.info(f'Фоновый сбор TAO логов завершен')
         
     except Exception as e:
-        chat_logger.error(f'Ошибка при сборе TAO логов: {e}', exc_info=True)
+        agent_logger.error(f'Ошибка при сборе TAO логов: {e}', exc_info=True)
 
 async def run_and_trace(agent, config, query: str):
     """
     Функция для запуска агента и сбора логов в фоне
     Возвращает ответ для пользователя и фоновую задачу
     """
-    chat_logger.info('Запуск функции agent_wrapper.run_and_trace()')
+    agent_logger.info('Запуск функции agent_wrapper.run_and_trace()')
     start_time = time.time()
     
     result = None
     try:
         result = await agent.ainvoke({'messages': [HumanMessage(content=query)]}, config=config)
-        chat_logger.info('Передача сообщения и получения ответа от агента завершилась успешно')
+        agent_logger.info('Передача сообщения и получения ответа от агента завершилась успешно')
     except Exception as e:
-        chat_logger.error(f'Передача сообщения и получения ответа от агента завершилась ошибкой: {e}', exc_info=True)
+        agent_logger.error(f'Передача сообщения и получения ответа от агента завершилась ошибкой: {e}', exc_info=True)
         #return f"Произошла ошибка при выполнении запроса агента: {e}", None
         return f"Произошла ошибка при выполнении запроса агента: {e}"
 
@@ -144,16 +144,16 @@ async def process_message(user_message: str, user_id: int, collect_tao_logs: boo
         config = {"configurable": {"thread_id": str(user_id)}}
         
         # Запускаем агента и собираем логи в фоне
-        chat_logger.info(f'Старт передачи сообщения пользователя: {user_message}')
+        agent_logger.info(f'Старт передачи сообщения пользователя: {user_message}')
         if collect_tao_logs:
             response_content = await run_and_trace(agent, config, user_message)
-            chat_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла запущен')
+            agent_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла запущен')
         else:
             response_content = await agent.ainvoke({'messages': [HumanMessage(content=user_message)]}, config=config)
-            chat_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла отключен')
+            agent_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла отключен')
         
         return response_content
     
     except Exception as e:
-        chat_logger.error(f'Асинхронный вызов агента завершился ошибкой: {e}', exc_info=True)
+        agent_logger.error(f'Асинхронный вызов агента завершился ошибкой: {e}', exc_info=True)
         raise
