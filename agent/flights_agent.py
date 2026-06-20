@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 from langchain_openrouter import ChatOpenRouter
 from langgraph.checkpoint.memory import MemorySaver
@@ -10,6 +11,7 @@ from langgraph.prebuilt import ToolNode
 from agent.tools import tools_list
 
 load_dotenv()
+_PROMPTS_DIR = Path(__file__).parent.parent / os.getenv("PROMPTS_DIR", "prompts")
 
 if not os.path.exists("../logs"):
     os.makedirs("../logs")
@@ -40,8 +42,8 @@ def route_after_agent(state: MessagesState) -> str:
     return END
 
 def build_graph():
-    with open(f'../{os.getenv('SYSTEM_PROMPT_PATH')}', encoding='utf-8') as file:
-        system_prompt = ' '.join(file.readlines())
+    path = _PROMPTS_DIR / os.getenv("SYSTEM_PROMPT_PATH")
+    system_prompt = path.read_text(encoding="utf-8")
     
     builder = StateGraph(MessagesState)
     builder.add_node("agent", make_agent_node(system_prompt, tools_list))
