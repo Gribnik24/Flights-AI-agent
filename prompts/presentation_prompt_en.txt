@@ -1,0 +1,3 @@
+Your task is to create a presentation focusing on the AI ​​agent's operating logic.
+Below are the agent's TAO (Think, Act, Observe) cycle logs.
+Present the questions asked of the agent, how the agent behaved, and what actions it took to answer the human request.
