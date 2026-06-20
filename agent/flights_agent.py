@@ -25,7 +25,7 @@ memory = MemorySaver()
 
 def make_agent_node(system_prompt: str, tools_list: list):
     """Create an agent node function that calls the LLM with bound tools."""
-    llm_with_tools = llm.bind_tools(tools_list, parallel_tool_calls=False)
+    llm_with_tools = llm.bind_tools(tools_list, parallel_tool_calls=True)
 
     def agent_node(state: MessagesState) -> dict:
         messages = [SystemMessage(content=system_prompt)] + state["messages"]
