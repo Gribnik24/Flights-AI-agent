@@ -145,7 +145,8 @@ async def create_presentation(message: Message, bot: Bot, command: CommandObject
     chat_logger.info(f'Успешное завершение создания контекста презентации:\n{presentation_context}')
     
     chat_logger.info('Старт присоединения системного промта для создания презентаций к контексту')
-    system_prompt = _PROMPTS_DIR / os.getenv("PRESENTATION_SYSTEM_PROMPT_PATH")
+    path = _PROMPTS_DIR / os.getenv("PRESENTATION_SYSTEM_PROMPT_PATH")
+    system_prompt = path.read_text(encoding="utf-8")
     presentation_context = system_prompt + presentation_context
     chat_logger.info('Успешное присоединение системного промта для создания презентаций к контексту')
 
