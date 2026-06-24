@@ -8,7 +8,7 @@ from agent.flights_agent import agent
 # Настройка двух отдельных логгеров
 def setup_loggers():
     """
-    Настройка двух логгеров для чата и TAO
+    Настройка двух логгеров для агента и TAO
     """
     # Логгер для чата
     agent_logger = logging.getLogger('agent_logs')
@@ -36,6 +36,7 @@ def setup_loggers():
         encoding='utf-8'
     )
     
+    # Задаем формат логов
     agent_formatter = logging.Formatter('[AGENT LOGS]: %(levelname)s | %(message)s')
     tao_formatter = logging.Formatter('[TAO LOGS]: %(levelname)s | %(message)s')
     agent_handler.setFormatter(agent_formatter)
@@ -51,7 +52,10 @@ agent_logger, tao_logger = setup_loggers()
 
 async def collect_tao_logs(result, start_time):
     """
-    Фоновый сбор TAO логов в том же формате, что и у вас
+    Фоновый сбор TAO логов
+    Args:
+        result (dict): сессия агента, с полем `messages` - TAO цикл и диалог с пользователем
+        start_time: время, в которое агент стартовал работу над ответом
     """
     try:
         agent_logger.info('Запуск фонового сбора TAO логов')
@@ -61,12 +65,14 @@ async def collect_tao_logs(result, start_time):
         step_num = 0
         all_messages = result['messages']
         
+        # Формируем просмотр сообщений с момента последнего пользовательского запроса
         last_human_idx = -1
         for i, msg in enumerate(all_messages):
             if type(msg).__name__ == 'HumanMessage':
                 last_human_idx = i
         current_messages = all_messages[last_human_idx:]
         
+        # Обрабатываем диалог
         for msg in current_messages:
             msg_type = type(msg).__name__
 
@@ -94,7 +100,7 @@ async def collect_tao_logs(result, start_time):
                 if msg.content and msg != result['messages'][0]:
                     tao_logger.info(f'FINAL ANSWER: {msg.content}')         
         
-        # Статистика
+        # Статистика по ответу
         tao_logger.info(f'Обработка статистики по ответу')
         tao_logger.info(f'Statistics: TAO cycles: {step_num} | Tool calls: {tool_count} | Time: {elapsed:.2f} s')
         agent_logger.info(f'Фоновый сбор TAO логов завершен')
@@ -104,24 +110,29 @@ async def collect_tao_logs(result, start_time):
 
 async def run_and_trace(agent, config, query: str):
     """
-    Функция для запуска агента и сбора логов в фоне
-    Возвращает ответ для пользователя и фоновую задачу
+    Функция для запуска агента и сбора логов в фоне. Возвращает ответ для пользователя и фоновую задачу
+    Args:
+        agent: агент, который будет вести работу
+        config: конфиг агента
+        query: запрос пользователя
+    Returns:
+        Финальный ответ пользователю
     """
     agent_logger.info('Запуск функции agent_wrapper.run_and_trace()')
     start_time = time.time()
     
+    # Передача запроса пользователя
     result = None
     try:
         result = await agent.ainvoke({'messages': [HumanMessage(content=query)]}, config=config)
         agent_logger.info('Передача сообщения и получения ответа от агента завершилась успешно')
     except Exception as e:
         agent_logger.error(f'Передача сообщения и получения ответа от агента завершилась ошибкой: {e}', exc_info=True)
-        #return f"Произошла ошибка при выполнении запроса агента: {e}", None
         return f"Произошла ошибка при выполнении запроса агента: {e}"
 
     if result is None:
-        #return "Ошибка: агент не вернул результат.", None
-        return "Ошибка: агент не вернул результат."
+        agent_logger.error('Ошибка: агент не вернул результат')
+        return "Ошибка: агент не вернул результат"
 
     # Получаем финальный ответ для пользователя
     user_response = "Ошибка: нет сообщений в ответе"
@@ -138,7 +149,11 @@ async def run_and_trace(agent, config, query: str):
 
 async def process_message(user_message: str, user_id: int, collect_tao_logs: bool = True) -> str:
     """
-    Обработка сообщения пользователя
+    Полная обработка сообщения пользователя.
+    Args:
+        user_message: запрос пользователя
+        user_id: id пользователя
+        collect_tao_logs: флаг для собирания логов. True - актинвый сбор TAO-логов; False - выдача ответа без сбора TAO-логов
     """
     try:
         config = {"configurable": {"thread_id": str(user_id)}}
@@ -148,6 +163,8 @@ async def process_message(user_message: str, user_id: int, collect_tao_logs: boo
         if collect_tao_logs:
             response_content = await run_and_trace(agent, config, user_message)
             agent_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла запущен')
+        
+        # Запуск агента без фонового сбора логов
         else:
             response_content = await agent.ainvoke({'messages': [HumanMessage(content=user_message)]}, config=config)
             agent_logger.info(f'Ответ отправлен пользователю, фоновый сбор логов TAO цикла отключен')

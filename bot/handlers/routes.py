@@ -19,9 +19,11 @@ _PROMPTS_DIR = Path(__file__).parent.parent.parent / os.getenv("PROMPTS_DIR", "p
 from agent.agent_wrapper import process_message
 from agent.flights_agent import agent, memory
 
-router = Router()
 
 def setup_command_logger():
+    """
+    Настройка логгера для чата
+    """
     chat_logger = logging.getLogger('chat_logs')
     chat_logger.setLevel(logging.INFO)
     chat_logger.propagate = False
@@ -36,9 +38,15 @@ def setup_command_logger():
     chat_logger.addHandler(chat_handler)
     return chat_logger
 
+
 chat_logger = setup_command_logger()
+router = Router()
+
 
 def get_main_button_keyboard():
+    """
+    Клавиатура после вызова /start
+    """
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text='Репозиторий GitHub со мной',
                                                url='https://github.com/Gribnik24/Flights-AI-agent')]],
@@ -46,6 +54,7 @@ def get_main_button_keyboard():
     )
     
     return keyboard
+
 
 @router.message(Command("start"))
 async def start(message: Message):
@@ -153,6 +162,7 @@ async def create_presentation(message: Message, bot: Bot, command: CommandObject
                                 message_id=loading_message.message_id,
                                 text='Приступаю к созданию презентации...')
 
+    # Формирования запроса к генератору презентаций
     chat_logger.info('Старт формирования запроса через API к генератору презентаций')
     try:
         creating_url = "https://api.presenton.ai/api/v3/presentation/generate/async"
@@ -188,7 +198,8 @@ async def create_presentation(message: Message, bot: Bot, command: CommandObject
             text='Генерация презентации...')
         
         chat_logger.info('Старт процесса генерации презентации')
-
+        
+        # Отслеживание процесса создания презентаций
         status_url = f"https://api.presenton.ai/api/v3/async-task/status/{presentation_id}"
         status_headers = {"Authorization": f"Bearer {os.getenv('PRESENTON_API_KEY')}"}
         max_retries = 60
@@ -290,6 +301,7 @@ async def restart(message: Message):
     chat_logger.info('Успешное завершение команды `/restart`')
     
 
+# Обработка обычного сообщения
 @router.message()
 async def income_message(message: Message, bot: Bot):  
     text = message.text.strip()

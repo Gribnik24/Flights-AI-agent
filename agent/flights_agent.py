@@ -24,7 +24,9 @@ llm = ChatOpenRouter(model=MODEL_NAME, api_key=MODEL_API_KEY, base_url=MODEL_API
 memory = MemorySaver()
 
 def make_agent_node(system_prompt: str, tools_list: list):
-    """Create an agent node function that calls the LLM with bound tools."""
+    """
+    Ячейка агента (agent node) для вызова LLM с привязанными инструментами
+    """
     llm_with_tools = llm.bind_tools(tools_list, parallel_tool_calls=True)
 
     def agent_node(state: MessagesState) -> dict:
@@ -35,13 +37,18 @@ def make_agent_node(system_prompt: str, tools_list: list):
     return agent_node
 
 def route_after_agent(state: MessagesState) -> str:
-    """Route to tools if the last message has tool calls, otherwise end."""
+    """
+    Путь к инструментам, если последнее сообщение содержит небходимость вызова инстурментов, иначе путь в END
+    """
     last = state["messages"][-1]
     if hasattr(last, "tool_calls") and last.tool_calls:
         return "tools"
     return END
 
 def build_graph():
+    """
+    Построение графа агента
+    """
     path = _PROMPTS_DIR / os.getenv("SYSTEM_PROMPT_PATH")
     system_prompt = path.read_text(encoding="utf-8")
     

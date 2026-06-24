@@ -74,7 +74,8 @@ async def get_airport_data(mode: str,
         ru_name = None
     if en_name == "None" or en_name == "null":
         en_name = None
-        
+    
+    # Проверка параметра `mode`
     if mode.lower() not in ('city', 'iata'):
         logging.error('Ошибка вызова инструмента. Параметр mode не принимает значения `city` или `iata`', exc_info=True)
         return json.dumps({'error': 'Ошибка вызова инструмента. Параметр mode должен принимать `city` или `iata`'}, ensure_ascii=False)
@@ -224,7 +225,7 @@ async def get_station_timetable(station_code: str,
         return json.dumps({'error': 'Ошибка получения информации по API'})
     logging.info('Успешное завершение получения данных рейсов через API')
     
-    # Обработка
+    # Обработка json-результата
     logging.info('Старт обработки данных рейсов, полученных через API')
     station_timetable = {}
     station_timetable['date'] = data.get('date', event_date)
